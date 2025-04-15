@@ -92,9 +92,6 @@ func runSpam() error {
 
 	var wallets []*types.Wallet
 	privateKeys := pkg.ReadPrivateKeysFromFile(cfg.KeysFile)
-	if privateKeys == nil {
-		return fmt.Errorf("failed to read private keys from file: %s", keysFile)
-	}
 	if len(privateKeys) == 0 {
 		return fmt.Errorf("no private keys found in file: %s", keysFile)
 	}
@@ -131,6 +128,50 @@ func runSpam() error {
 	return nil
 }
 
+func runFaucetTransfer() error {
+	if err := loadConfiguration(); err != nil {
+		return err
+	}
+
+	provider := getRandomProvider(cfg.ProviderURLs)
+	client, err := ethclient.Dial(provider)
+	if err != nil {
+		return fmt.Errorf("failed to connect to provider %s: %v", provider, err)
+	}
+
+	faucetWallet, err := wallet.NewWallet(cfg.Faucet.PrivateKey, client, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create faucet wallet: %v", err)
+	}
+
+	amountInEth := cfg.Faucet.AmountPerTransfer
+	amount, err := pkg.EthToWei(amountInEth)
+	if err != nil {
+		return fmt.Errorf("invalid ETH amount: %v", err)
+	}
+	fmt.Println("Amount to transfer:", amount.String())
+
+	privateKeys := pkg.ReadPrivateKeysFromFile(cfg.KeysFile)
+	if len(privateKeys) == 0 {
+		return fmt.Errorf("no private keys found in file: %s", cfg.KeysFile)
+	}
+
+	maxConcurrency := config.GetMaxConcurrency(runtime.NumCPU())
+	log.Printf("Using max concurrency: %d", maxConcurrency)
+	log.Printf("Transferring %s ETH to %d addresses...", amountInEth, len(privateKeys))
+
+	errors := wallet.TransferFromFaucet(faucetWallet, privateKeys, amount, maxConcurrency)
+	for i, err := range errors {
+		if err != nil {
+			log.Printf("Transfer %d failed: %v", i, err)
+		} else {
+			log.Printf("Transfer %d: Successfully transferred %s ETH", i, amountInEth)
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "spam-evm",
@@ -142,12 +183,25 @@ by sending multiple transactions from different wallets concurrently.`,
 		},
 	}
 
-	flags := rootCmd.Flags()
-	flags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
-	flags.IntVar(&txPerWallet, "tx-per-wallet", 0, "Number of transactions per wallet")
-	flags.IntVar(&cpuMultiplier, "cpu-multiplier", 0, "CPU core multiplier for GOMAXPROCS")
-	flags.StringVar(&keysFile, "keys-file", "", "File path for private keys")
-	flags.StringVar(&providerURLs, "provider-urls", "", "Comma-separated list of provider URLs")
+	faucetCmd := &cobra.Command{
+		Use:   "faucet",
+		Short: "Transfer ETH from faucet to test wallets",
+		Long:  `Transfer ETH from a faucet wallet to test wallets specified in the keys file.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runFaucetTransfer()
+		},
+	}
+
+	// Add flags to root command
+	rootFlags := rootCmd.PersistentFlags()
+	rootFlags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
+	rootFlags.IntVar(&txPerWallet, "tx-per-wallet", 0, "Number of transactions per wallet")
+	rootFlags.IntVar(&cpuMultiplier, "cpu-multiplier", 0, "CPU core multiplier for GOMAXPROCS")
+	rootFlags.StringVar(&keysFile, "keys-file", "", "File path for private keys")
+	rootFlags.StringVar(&providerURLs, "provider-urls", "", "Comma-separated list of provider URLs")
+
+	// Add faucet command
+	rootCmd.AddCommand(faucetCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

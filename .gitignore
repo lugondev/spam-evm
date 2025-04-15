@@ -15,7 +15,7 @@
 *.swo
 
 # Project specific
-private-keys.txt
+*-keys.txt
 /spam-evm
 
 # Binaries for programs and plugins

@@ -14,3 +14,8 @@ providerUrls:
     - 'https://rpc1.example.com'
     - 'https://rpc2.example.com'
     - 'wss://ws.example.com'
+
+# Faucet configuration
+faucet:
+    privateKey: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+    amountPerTransfer: '0.1' # Amount in ETH to transfer to each test wallet

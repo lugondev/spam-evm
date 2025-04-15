@@ -7,11 +7,17 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type FaucetConfig struct {
+	PrivateKey        string `yaml:"privateKey"`
+	AmountPerTransfer string `yaml:"amountPerTransfer"`
+}
+
 type Config struct {
-	TxPerWallet   int      `yaml:"txPerWallet"`
-	CpuMultiplier int      `yaml:"cpuMultiplier"`
-	KeysFile      string   `yaml:"keysFile"`
-	ProviderURLs  []string `yaml:"providerUrls"`
+	TxPerWallet   int          `yaml:"txPerWallet"`
+	CpuMultiplier int          `yaml:"cpuMultiplier"`
+	KeysFile      string       `yaml:"keysFile"`
+	ProviderURLs  []string     `yaml:"providerUrls"`
+	Faucet        FaucetConfig `yaml:"faucet"`
 }
 
 func LoadConfig(configPath string) (*Config, error) {
@@ -48,6 +54,12 @@ func (c *Config) Validate() error {
 	}
 	if len(c.ProviderURLs) == 0 {
 		return fmt.Errorf("provider-urls is required")
+	}
+	if c.Faucet.PrivateKey == "" {
+		return fmt.Errorf("faucet private key is required")
+	}
+	if c.Faucet.AmountPerTransfer == "" {
+		return fmt.Errorf("faucet amount per transfer is required")
 	}
 	return nil
 }
