@@ -28,3 +28,4 @@ private-keys.txt
 # Coverage
 *.coverprofile
 coverage.txt
+config.yaml

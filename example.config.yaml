@@ -1,0 +1,16 @@
+# Example configuration file for spam-evm
+
+# Number of transactions to send per wallet
+txPerWallet: 10
+
+# CPU core multiplier for GOMAXPROCS
+cpuMultiplier: 5
+
+# File path for private keys (one key per line)
+keysFile: 'private-keys.txt'
+
+# List of provider URLs (RPC endpoints)
+providerUrls:
+    - 'https://rpc1.example.com'
+    - 'https://rpc2.example.com'
+    - 'wss://ws.example.com'

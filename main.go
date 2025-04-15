@@ -21,26 +21,36 @@ import (
 )
 
 var (
+	cfg           *config.Config
+	configFile    string
 	txPerWallet   int
 	cpuMultiplier int
 	keysFile      string
 	providerURLs  string
 )
 
-func validateFlags() error {
-	if txPerWallet <= 0 {
-		return fmt.Errorf("tx-per-wallet must be greater than 0")
+func loadConfiguration() error {
+	var err error
+	cfg, err = config.LoadConfig(configFile)
+	if err != nil {
+		return fmt.Errorf("failed to load config: %v", err)
 	}
-	if cpuMultiplier <= 0 {
-		return fmt.Errorf("cpu-multiplier must be greater than 0")
+
+	// Override config with CLI flags if provided
+	if txPerWallet > 0 {
+		cfg.TxPerWallet = txPerWallet
 	}
-	if keysFile == "" {
-		return fmt.Errorf("keys-file is required")
+	if cpuMultiplier > 0 {
+		cfg.CpuMultiplier = cpuMultiplier
 	}
-	if providerURLs == "" {
-		return fmt.Errorf("provider-urls is required")
+	if keysFile != "" {
+		cfg.KeysFile = keysFile
 	}
-	return nil
+	if providerURLs != "" {
+		cfg.ProviderURLs = strings.Split(providerURLs, ",")
+	}
+
+	return cfg.Validate()
 }
 
 func getRandomProvider(urls []string) string {
@@ -48,19 +58,18 @@ func getRandomProvider(urls []string) string {
 }
 
 func runSpam() error {
-	if err := validateFlags(); err != nil {
+	if err := loadConfiguration(); err != nil {
 		return err
 	}
 
 	rand.NewSource(time.Now().UnixNano())
 
-	providers := strings.Split(providerURLs, ",")
-	if len(providers) == 0 {
+	if len(cfg.ProviderURLs) == 0 {
 		return fmt.Errorf("no provider URLs found")
 	}
-	log.Printf("Using %d provider URLs", len(providers))
+	log.Printf("Using %d provider URLs", len(cfg.ProviderURLs))
 
-	oldMaxProcs := runtime.GOMAXPROCS(runtime.NumCPU() * cpuMultiplier)
+	oldMaxProcs := runtime.GOMAXPROCS(runtime.NumCPU() * cfg.CpuMultiplier)
 	log.Printf("Changed GOMAXPROCS from %d to %d", oldMaxProcs, runtime.GOMAXPROCS(0))
 
 	metricsData := types.NewPerformanceMetrics()
@@ -68,12 +77,12 @@ func runSpam() error {
 	log.Printf("CPU Cores: %d", runtime.NumCPU())
 	log.Printf("GOMAXPROCS: %d", runtime.GOMAXPROCS(0))
 
-	maxPoolConnections := config.GetMaxPoolConnections(runtime.NumCPU(), cpuMultiplier)
+	maxPoolConnections := config.GetMaxPoolConnections(runtime.NumCPU(), cfg.CpuMultiplier)
 	log.Printf("Using max pool connections: %d", maxPoolConnections)
 
 	clientPool := make([]*ethclient.Client, maxPoolConnections)
 	for i := 0; i < maxPoolConnections; i++ {
-		provider := getRandomProvider(providers)
+		provider := getRandomProvider(cfg.ProviderURLs)
 		client, err := ethclient.Dial(provider)
 		if err != nil {
 			return fmt.Errorf("failed to connect to provider %s: %v", provider, err)
@@ -82,7 +91,7 @@ func runSpam() error {
 	}
 
 	var wallets []*types.Wallet
-	privateKeys := pkg.ReadPrivateKeysFromFile(keysFile)
+	privateKeys := pkg.ReadPrivateKeysFromFile(cfg.KeysFile)
 	if privateKeys == nil {
 		return fmt.Errorf("failed to read private keys from file: %s", keysFile)
 	}
@@ -108,9 +117,9 @@ func runSpam() error {
 
 	maxConcurrency := config.GetMaxConcurrency(runtime.NumCPU())
 	log.Printf("Using max concurrency: %d", maxConcurrency)
-	log.Printf("Transactions per wallet: %d", txPerWallet)
+	log.Printf("Transactions per wallet: %d", cfg.TxPerWallet)
 
-	txs, perfMetrics, err := network.SpamNetwork(wallets, txPerWallet, maxConcurrency)
+	txs, perfMetrics, err := network.SpamNetwork(wallets, cfg.TxPerWallet, maxConcurrency)
 	if err != nil {
 		return fmt.Errorf("error spamming network: %v", err)
 	}
@@ -134,12 +143,11 @@ by sending multiple transactions from different wallets concurrently.`,
 	}
 
 	flags := rootCmd.Flags()
-	flags.IntVar(&txPerWallet, "tx-per-wallet", 10, "Number of transactions per wallet")
-	flags.IntVar(&cpuMultiplier, "cpu-multiplier", 5, "CPU core multiplier for GOMAXPROCS")
-	flags.StringVar(&keysFile, "keys-file", "private-keys.txt", "File path for private keys")
+	flags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
+	flags.IntVar(&txPerWallet, "tx-per-wallet", 0, "Number of transactions per wallet")
+	flags.IntVar(&cpuMultiplier, "cpu-multiplier", 0, "CPU core multiplier for GOMAXPROCS")
+	flags.StringVar(&keysFile, "keys-file", "", "File path for private keys")
 	flags.StringVar(&providerURLs, "provider-urls", "", "Comma-separated list of provider URLs")
-
-	rootCmd.MarkFlagRequired("provider-urls")
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
