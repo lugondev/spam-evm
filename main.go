@@ -96,7 +96,7 @@ func runSpam() error {
 	if len(privateKeys) == 0 {
 		return fmt.Errorf("no private keys found in file: %s", keysFile)
 	}
-	log.Printf("Creating %d wallets...", len(privateKeys))
+	log.Printf("Setting up %d wallets...", len(privateKeys))
 
 	connectionStart := time.Now()
 	for _, key := range privateKeys {

@@ -31,12 +31,13 @@ func MonitorResources(stopCh <-chan struct{}, frequency time.Duration) {
 
 func LogPerformanceAnalysis(metrics *types.PerformanceMetrics, startTime time.Time) {
 	log.Println("\n--- PERFORMANCE ANALYSIS ---")
-	totalTime := time.Since(startTime)
-	log.Printf("Connection setup: %.2fms", float64(metrics.ConnectionTime.Milliseconds()))
-	log.Printf("Transaction signing: %.2fms (%.2f%%)",
-		float64(metrics.SignTime.Milliseconds()),
-		float64(metrics.SignTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
-	log.Printf("Transaction sending: %.2fms (%.2f%%)",
-		float64(metrics.SendTime),
-		float64(metrics.SendTime)/float64(totalTime.Milliseconds())*100)
+
+	connectionMs := float64(metrics.ConnectionTime.Milliseconds())
+	signingMs := float64(metrics.SignTime.Milliseconds())
+	sendingMs := float64(metrics.SendTime.Milliseconds())
+	totalMs := connectionMs + signingMs + sendingMs
+
+	log.Printf("Connection setup: %.2fms (%.2f%%)", connectionMs, (connectionMs/totalMs)*100)
+	log.Printf("Transaction signing: %.2fms (%.2f%%)", signingMs, (signingMs/totalMs)*100)
+	log.Printf("Transaction sending: %.2fms (%.2f%%)", sendingMs, (sendingMs/totalMs)*100)
 }
