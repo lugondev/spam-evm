@@ -50,7 +50,7 @@ func NewWallet(privateKeyHex string, client *ethclient.Client, metrics *types.Pe
 	return wallet, nil
 }
 
-func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amount *big.Int, maxConcurrent int) []error {
+func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amount *big.Int, maxConcurrent int, provider string) []error {
 	var (
 		balance *big.Int
 		err     error
@@ -77,8 +77,8 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 		return []error{fmt.Errorf("insufficient faucet balance for all transfers")}
 	}
 
-	// Initialize network parameters
-	networkParams, err := types.NewNetworkParams(ctx, faucetWallet.Client)
+	// Initialize network parameters with a single provider URL
+	networkParams, err := types.NewNetworkParams(ctx, faucetWallet.Client, []string{provider})
 	if err != nil {
 		return []error{fmt.Errorf("failed to initialize network parameters: %w", err)}
 	}

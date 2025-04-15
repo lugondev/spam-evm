@@ -29,7 +29,6 @@ See [example.config.yaml](example.config.yaml) for a sample configuration file f
 ### Command-line Flags
 
 - `--provider-urls`: Comma-separated list of provider URLs. URLs will be randomly selected for load balancing.
-
 - `--config`: Path to YAML configuration file
 - `--provider-urls`: Comma-separated list of provider URLs
 - `--keys-file`: File path for private keys (one key per line, default: private-keys.txt)
@@ -42,7 +41,12 @@ Note: Command-line flags take precedence over values in the config file.
 
 ### Spam Network (Default)
 
-The default command sends multiple transactions from each wallet to stress test the network.
+The default command sends multiple transactions from each wallet to stress test the network using:
+- Transaction batching for improved throughput
+- Parallel nonce management to prevent conflicts
+- Mempool monitoring and throttling
+- Dynamic batch retries with configurable timeouts
+- Load balancing across multiple RPC endpoints
 
 ### Faucet Transfer
 
@@ -94,13 +98,44 @@ The private keys file should contain one private key per line. Example:
 fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
 ```
 
+## Performance Optimization
+
+The tool implements several optimizations to maximize transaction throughput:
+
+### Transaction Batching
+- Groups multiple transactions into batches
+- Configurable batch size (default: 100)
+- Parallel batch processing
+- Dynamic batch retries on failure
+
+### Nonce Management
+- Parallel nonce queue per wallet
+- Pre-allocated nonce ranges
+- Automatic nonce recovery and reuse
+- Prevents nonce conflicts in high-throughput scenarios
+
+### Connection Management
+- Enhanced connection pooling
+- Automatic health checks
+- Connection load balancing
+- Configurable pool size and retry settings
+
+### Mempool Monitoring
+- Tracks pending transaction count
+- Implements adaptive throttling
+- Prevents mempool overflow
+- Configurable thresholds
+
 ## Metrics
 
-The tool provides performance metrics including:
+The tool provides detailed performance metrics including:
 - Connection time
 - Transaction success rate
 - Average transaction time
+- Batch processing statistics
+- Mempool utilization
 - Total execution time
+- Transactions per second (TPS)
 
 ## Load Balancing
 
@@ -108,3 +143,4 @@ The tool automatically distributes the load across all provided provider URLs by
 1. Randomly selecting a provider for each client connection
 2. Creating multiple client connections for parallel transaction processing
 3. Balancing the transaction load across available providers
+4. Automatic failover on connection issues

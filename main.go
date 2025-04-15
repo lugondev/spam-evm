@@ -118,7 +118,7 @@ func runSpam() error {
 	log.Printf("Transactions per wallet: %d", cfg.TxPerWallet)
 
 	// Initialize network parameters once
-	networkParams, err := types.NewNetworkParams(context.Background(), clientPool[0])
+	networkParams, err := types.NewNetworkParams(context.Background(), clientPool[0], cfg.ProviderURLs)
 	if err != nil {
 		return fmt.Errorf("failed to initialize network parameters: %v", err)
 	}
@@ -167,7 +167,7 @@ func runFaucetTransfer() error {
 	log.Printf("Using max concurrency: %d", maxConcurrency)
 	log.Printf("Transferring %s ETH to %d addresses...", amountInEth, len(privateKeys))
 
-	errors := wallet.TransferFromFaucet(faucetWallet, privateKeys, amount, maxConcurrency)
+	errors := wallet.TransferFromFaucet(faucetWallet, privateKeys, amount, maxConcurrency, provider)
 	for i, err := range errors {
 		if err != nil {
 			log.Printf("Transfer %d failed: %v", i, err)

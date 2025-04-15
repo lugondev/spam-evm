@@ -64,15 +64,18 @@ func (pm *PerformanceMetrics) IncrementFailedTransactions() {
 
 // NetworkParams holds chain-wide parameters that are common across all wallets
 type NetworkParams struct {
-	ChainID     *big.Int
-	GasPrice    *big.Int
-	LastUpdated time.Time
-	mutex       sync.RWMutex
+	ChainID      *big.Int
+	GasPrice     *big.Int
+	LastUpdated  time.Time
+	ProviderURLs []string
+	mutex        sync.RWMutex
 }
 
 // NewNetworkParams initializes network parameters
-func NewNetworkParams(ctx context.Context, client *ethclient.Client) (*NetworkParams, error) {
-	params := &NetworkParams{}
+func NewNetworkParams(ctx context.Context, client *ethclient.Client, providerURLs []string) (*NetworkParams, error) {
+	params := &NetworkParams{
+		ProviderURLs: providerURLs,
+	}
 	if err := params.Update(ctx, client); err != nil {
 		return nil, err
 	}
