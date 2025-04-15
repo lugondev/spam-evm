@@ -38,7 +38,24 @@ See [example.config.yaml](example.config.yaml) for a sample configuration file f
 
 Note: Command-line flags take precedence over values in the config file.
 
+## Commands
+
+### Spam Network (Default)
+
+The default command sends multiple transactions from each wallet to stress test the network.
+
+### Faucet Transfer
+
+The `faucet` command transfers ETH from a faucet wallet to all test wallets specified in the keys file.
+
+```bash
+# Transfer ETH to all wallets in private-keys.txt
+spam-evm faucet
+```
+
 ## Examples
+
+### Spam Network
 
 Using command-line flags:
 ```bash
@@ -56,6 +73,16 @@ spam-evm --config config.yaml
 
 # Override config file values with flags
 spam-evm --config config.yaml --tx-per-wallet=50
+```
+
+### Faucet Configuration
+
+The faucet settings can be configured in the YAML config file:
+
+```yaml
+faucet:
+  privateKey: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+  amountPerTransfer: '0.1' # Amount in ETH to transfer to each test wallet
 ```
 
 ## Private Keys File Format
