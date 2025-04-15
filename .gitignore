@@ -1,0 +1,30 @@
+# Go specific
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+/vendor/
+
+# IDE specific
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project specific
+private-keys.txt
+/spam-evm
+
+# Binaries for programs and plugins
+**/debug/
+**/release/
+
+# Test binary, built with "go test -c"
+*.test
+
+# Coverage
+*.coverprofile
+coverage.txt
