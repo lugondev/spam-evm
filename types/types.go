@@ -16,13 +16,11 @@ type Wallet struct {
 	PrivateKey *ecdsa.PrivateKey
 	Address    common.Address
 	Client     *ethclient.Client
+	Nonce      uint64
 }
 
 type PerformanceMetrics struct {
 	ConnectionTime     time.Duration
-	NonceTime          time.Duration
-	ChainIDTime        time.Duration
-	GasPriceTime       time.Duration
 	SignTime           time.Duration
 	SendTime           time.Duration
 	TotalTransactions  int
@@ -38,24 +36,6 @@ func (pm *PerformanceMetrics) AddConnectionTime(d time.Duration) {
 	pm.Mutex.Lock()
 	defer pm.Mutex.Unlock()
 	pm.ConnectionTime += d
-}
-
-func (pm *PerformanceMetrics) AddNonceTime(d time.Duration) {
-	pm.Mutex.Lock()
-	defer pm.Mutex.Unlock()
-	pm.NonceTime += d
-}
-
-func (pm *PerformanceMetrics) AddChainIDTime(d time.Duration) {
-	pm.Mutex.Lock()
-	defer pm.Mutex.Unlock()
-	pm.ChainIDTime += d
-}
-
-func (pm *PerformanceMetrics) AddGasPriceTime(d time.Duration) {
-	pm.Mutex.Lock()
-	defer pm.Mutex.Unlock()
-	pm.GasPriceTime += d
 }
 
 func (pm *PerformanceMetrics) AddSignTime(d time.Duration) {

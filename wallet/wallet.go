@@ -33,11 +33,21 @@ func NewWallet(privateKeyHex string, client *ethclient.Client, metrics *types.Pe
 
 	address := crypto.PubkeyToAddress(*publicKeyECDSA)
 
-	return &types.Wallet{
+	wallet := &types.Wallet{
 		PrivateKey: privateKey,
 		Address:    address,
 		Client:     client,
-	}, nil
+	}
+
+	if client != nil {
+		nonce, err := client.PendingNonceAt(context.Background(), address)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get nonce: %w", err)
+		}
+		wallet.Nonce = nonce
+	}
+
+	return wallet, nil
 }
 
 func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amount *big.Int, maxConcurrent int) []error {
@@ -84,12 +94,8 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 	results := make(chan transferResult, len(recipientKeys))
 	nonceChan := make(chan uint64, 1) // Channel to synchronize nonce updates
 
-	// Initialize nonce
-	initialNonce, err := faucetWallet.Client.PendingNonceAt(context.Background(), faucetWallet.Address)
-	if err != nil {
-		return []error{fmt.Errorf("failed to get initial nonce: %w", err)}
-	}
-	nonceChan <- initialNonce
+	// Initialize nonce channel
+	nonceChan <- faucetWallet.Nonce
 
 	// Process transfers with concurrency limit
 	sem := make(chan struct{}, maxConcurrent)

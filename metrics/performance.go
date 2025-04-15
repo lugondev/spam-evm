@@ -33,19 +33,10 @@ func LogPerformanceAnalysis(metrics *types.PerformanceMetrics, startTime time.Ti
 	log.Println("\n--- PERFORMANCE ANALYSIS ---")
 	totalTime := time.Since(startTime)
 	log.Printf("Connection setup: %.2fms", float64(metrics.ConnectionTime.Milliseconds()))
-	log.Printf("Nonce queries: %.2fms (%.2f%%)",
-		float64(metrics.NonceTime.Milliseconds()),
-		float64(metrics.NonceTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
-	log.Printf("ChainID queries: %.2fms (%.2f%%)",
-		float64(metrics.ChainIDTime.Milliseconds()),
-		float64(metrics.ChainIDTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
-	log.Printf("GasPrice queries: %.2fms (%.2f%%)",
-		float64(metrics.GasPriceTime.Milliseconds()),
-		float64(metrics.GasPriceTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
 	log.Printf("Transaction signing: %.2fms (%.2f%%)",
 		float64(metrics.SignTime.Milliseconds()),
 		float64(metrics.SignTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
 	log.Printf("Transaction sending: %.2fms (%.2f%%)",
-		float64(metrics.SendTime.Milliseconds()),
-		float64(metrics.SendTime.Milliseconds())/float64(totalTime.Milliseconds())*100)
+		float64(metrics.SendTime),
+		float64(metrics.SendTime)/float64(totalTime.Milliseconds())*100)
 }

@@ -39,14 +39,7 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 		go func(w *types.Wallet) {
 			defer wg.Done()
 
-			nonceStart := time.Now()
-			nonce, err := w.Client.PendingNonceAt(ctx, w.Address)
-			metrics.AddNonceTime(time.Since(nonceStart))
-
-			if err != nil {
-				log.Printf("Failed to get nonce for %s: %v", w.Address.Hex(), err)
-				return
-			}
+			nonce := w.Nonce
 
 			for i := 0; i < count; i++ {
 				if sem != nil {
