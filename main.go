@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"math/rand"
@@ -116,7 +117,13 @@ func runSpam() error {
 	log.Printf("Using max concurrency: %d", maxConcurrency)
 	log.Printf("Transactions per wallet: %d", cfg.TxPerWallet)
 
-	txs, perfMetrics, err := network.SpamNetwork(wallets, cfg.TxPerWallet, maxConcurrency)
+	// Initialize network parameters once
+	networkParams, err := types.NewNetworkParams(context.Background(), clientPool[0])
+	if err != nil {
+		return fmt.Errorf("failed to initialize network parameters: %v", err)
+	}
+
+	txs, perfMetrics, err := network.SpamNetwork(wallets, cfg.TxPerWallet, maxConcurrency, networkParams)
 	if err != nil {
 		return fmt.Errorf("error spamming network: %v", err)
 	}

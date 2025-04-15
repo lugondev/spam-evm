@@ -8,14 +8,14 @@ import (
 	"sync"
 	"time"
 
+	"spam-evm/pkg"
 	"spam-evm/types"
-	"spam-evm/wallet"
 
 	"github.com/ethereum/go-ethereum/common"
 	ethTypes "github.com/ethereum/go-ethereum/core/types"
 )
 
-func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int) ([]common.Hash, *types.PerformanceMetrics, error) {
+func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params *types.NetworkParams) ([]common.Hash, *types.PerformanceMetrics, error) {
 	ctx := context.Background()
 	log.Println("Starting spam network...")
 
@@ -48,41 +48,23 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int) ([]comm
 				return
 			}
 
-			chainIDStart := time.Now()
-			chainID, err := w.Client.ChainID(ctx)
-			metrics.AddChainIDTime(time.Since(chainIDStart))
-
-			if err != nil {
-				log.Printf("Failed to get chain ID for %s: %v", w.Address.Hex(), err)
-				return
-			}
-
-			gasPriceStart := time.Now()
-			gasPrice, err := w.Client.SuggestGasPrice(ctx)
-			metrics.AddGasPriceTime(time.Since(gasPriceStart))
-
-			if err != nil {
-				log.Printf("Failed to get gas price for %s: %v", w.Address.Hex(), err)
-				return
-			}
-
 			for i := 0; i < count; i++ {
 				if sem != nil {
 					sem <- struct{}{}
 				}
 
-				randomAddress := wallet.GenerateRandomEthAddress()
+				randomAddress := pkg.GenerateRandomEthAddress()
 				tx := ethTypes.NewTransaction(
 					nonce+uint64(i),
 					randomAddress,
 					minValue,
 					uint64(21000),
-					gasPrice,
+					params.GetGasPrice(),
 					nil,
 				)
 
 				signStart := time.Now()
-				signedTx, err := ethTypes.SignTx(tx, ethTypes.NewEIP155Signer(chainID), w.PrivateKey)
+				signedTx, err := ethTypes.SignTx(tx, ethTypes.NewEIP155Signer(params.GetChainID()), w.PrivateKey)
 				metrics.AddSignTime(time.Since(signStart))
 
 				if err != nil {

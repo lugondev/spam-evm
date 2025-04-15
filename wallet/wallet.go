@@ -42,10 +42,8 @@ func NewWallet(privateKeyHex string, client *ethclient.Client, metrics *types.Pe
 
 func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amount *big.Int, maxConcurrent int) []error {
 	var (
-		chainID  *big.Int
-		gasPrice *big.Int
-		balance  *big.Int
-		err      error
+		balance *big.Int
+		err     error
 	)
 
 	// Set context with timeout
@@ -71,37 +69,11 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 		return []error{fmt.Errorf("insufficient faucet balance for all transfers")}
 	}
 
-	// Get chain ID and gas price with retry
-	for range 3 {
-		chainID, err = faucetWallet.Client.ChainID(context.Background())
-		if err != nil {
-			return []error{fmt.Errorf("failed to get chain ID: %w", err)}
-		}
-
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second)
-	}
+	// Initialize network parameters
+	networkParams, err := types.NewNetworkParams(ctx, faucetWallet.Client)
 	if err != nil {
-		return []error{fmt.Errorf("failed to get chain ID after retries: %w", err)}
+		return []error{fmt.Errorf("failed to initialize network parameters: %w", err)}
 	}
-
-	// Get gas price with retry
-	for range 3 {
-		gasPrice, err = faucetWallet.Client.SuggestGasPrice(context.Background())
-		if err == nil {
-			break
-		}
-		time.Sleep(time.Second)
-	}
-	if err != nil {
-		return []error{fmt.Errorf("failed to get gas price after retries: %w", err)}
-	}
-
-	// Increase gas price by 10% to ensure transaction goes through
-	gasPrice = new(big.Int).Mul(gasPrice, big.NewInt(110))
-	gasPrice = new(big.Int).Div(gasPrice, big.NewInt(100))
 
 	// Create channels for concurrent processing
 	type transferResult struct {
@@ -138,8 +110,8 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 			nonceChan <- nonce + 1
 
 			// Create and sign transaction
-			tx := ethtypes.NewTransaction(nonce, recipientWallet.Address, amount, 21000, gasPrice, nil)
-			signedTx, err := ethtypes.SignTx(tx, ethtypes.NewEIP155Signer(chainID), faucetWallet.PrivateKey)
+			tx := ethtypes.NewTransaction(nonce, recipientWallet.Address, amount, 21000, networkParams.GetGasPrice(), nil)
+			signedTx, err := ethtypes.SignTx(tx, ethtypes.NewEIP155Signer(networkParams.GetChainID()), faucetWallet.PrivateKey)
 			if err != nil {
 				results <- transferResult{index, fmt.Errorf("failed to sign transaction: %w", err), common.Hash{}}
 				return
@@ -220,16 +192,4 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 	}
 
 	return errors
-}
-
-func GenerateRandomEthAddress() common.Address {
-	key, err := crypto.GenerateKey()
-	if err != nil {
-		b := make([]byte, 20)
-		for i := range b {
-			b[i] = byte(i + 1)
-		}
-		return common.BytesToAddress(b)
-	}
-	return crypto.PubkeyToAddress(key.PublicKey)
 }
