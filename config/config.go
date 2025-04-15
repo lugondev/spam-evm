@@ -18,6 +18,10 @@ func GetCPUMultiplier() int {
 	return 5
 }
 
+func GetTxPerWallet() int {
+	return 10
+}
+
 func GetMaxPoolConnections(cpuCores int, cpuMultiplier int) int {
 	return cpuCores * cpuMultiplier
 }

@@ -63,7 +63,10 @@ func main() {
 	maxConcurrency := config.GetMaxConcurrency(runtime.NumCPU())
 	log.Printf("Using max concurrency: %d", maxConcurrency)
 
-	txs, perfMetrics, err := network.SpamNetwork(wallets, 10, maxConcurrency)
+	txPerWallet := config.GetTxPerWallet()
+	log.Printf("Transactions per wallet: %d", txPerWallet)
+
+	txs, perfMetrics, err := network.SpamNetwork(wallets, txPerWallet, maxConcurrency)
 	if err != nil {
 		log.Fatalf("Error spamming network: %v", err)
 	}
