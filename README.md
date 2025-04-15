@@ -1,92 +1,53 @@
-# Spam EVM
+# spam-evm
 
-A high-performance load testing tool for Ethereum Virtual Machine (EVM) networks. This tool allows you to stress test EVM-compatible networks by sending concurrent transactions from multiple wallets.
-
-## Features
-
-- Multi-wallet support with configurable private keys
-- Connection pooling for optimal network performance
-- Configurable CPU utilization and concurrency
-- Detailed performance metrics and analysis
-- Support for multiple EVM-compatible networks
-- Auto-scaling based on available CPU cores
-
-## Installation
-
-1. Ensure you have Go 1.19 or later installed
-2. Clone the repository:
-```bash
-git clone https://github.com/yourusername/spam-evm.git
-cd spam-evm
-```
-3. Install dependencies:
-```bash
-go mod download
-```
-
-## Configuration
-
-1. Create a `private-keys.txt` file with one private key per line
-2. Customize network settings in `config/config.go`:
-   - RPC endpoints
-   - CPU multiplier
-   - Max concurrency
-   - Connection pool size
+A command-line tool for stress testing EVM-compatible networks by sending multiple transactions from different wallets concurrently.
 
 ## Usage
 
-1. Build the project:
 ```bash
-go build
+spam-evm --provider-urls <comma-separated-urls> [flags]
 ```
 
-2. Run the spammer:
+### Required Flags
+
+- `--provider-urls`: Comma-separated list of provider URLs. URLs will be randomly selected for load balancing.
+
+### Optional Flags
+
+- `--keys-file`: File path for private keys (one key per line, default: private-keys.txt)
+- `--tx-per-wallet`: Number of transactions per wallet (default: 10)
+- `--cpu-multiplier`: CPU core multiplier for GOMAXPROCS (default: 5)
+
+## Example
+
 ```bash
-./spam-evm
+# Using multiple provider URLs
+spam-evm --provider-urls="http://localhost:8545,http://localhost:8546,http://localhost:8547" --tx-per-wallet=20
+
+# With custom keys file and CPU multiplier
+spam-evm --provider-urls="http://node1:8545,http://node2:8545" --keys-file=keys.txt --cpu-multiplier=10
 ```
 
-The tool will automatically:
-- Load private keys and create corresponding wallets
-- Establish connection pools to the network
-- Start sending transactions concurrently
-- Display real-time performance metrics
+## Private Keys File Format
 
-## Performance Monitoring
+The private keys file should contain one private key per line. Example:
 
-The tool provides detailed metrics including:
-- Connection establishment time
-- Transactions per second (TPS)
-- Success/failure rates
-- Network latency
-- Resource utilization
-
-## Architecture
-
-```mermaid
-graph TD
-    A[Main] --> B[Config]
-    A --> C[Wallet Manager]
-    A --> D[Network Spammer]
-    D --> E[Performance Metrics]
-    C --> F[ETH Client Pool]
-    D --> F
+```text
+0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210
 ```
 
-## Best Practices
+## Metrics
 
-1. Start with a small number of wallets and gradually increase
-2. Monitor system resources during testing
-3. Adjust CPU multiplier and concurrency based on network capacity
-4. Use multiple RPC endpoints for better load distribution
-5. Ensure sufficient funds in test wallets
+The tool provides performance metrics including:
+- Connection time
+- Transaction success rate
+- Average transaction time
+- Total execution time
 
-## Troubleshooting
+## Load Balancing
 
-Common issues and solutions:
-- **Connection errors**: Check RPC endpoint availability and rate limits
-- **Out of gas**: Ensure wallets have sufficient funds
-- **Poor performance**: Try adjusting CPU multiplier and connection pool size
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
+The tool automatically distributes the load across all provided provider URLs by:
+1. Randomly selecting a provider for each client connection
+2. Creating multiple client connections for parallel transaction processing
+3. Balancing the transaction load across available providers

@@ -2,18 +2,15 @@ package pkg
 
 import (
 	"bufio"
-	"log"
 	"os"
 )
 
-const fileName = "private-keys.txt"
-
-// ReadPrivateKeys reads private keys from a file
-func ReadPrivateKeys() []string {
+// ReadPrivateKeysFromFile reads private keys from the specified file path
+func ReadPrivateKeysFromFile(filePath string) []string {
 	// open the file
-	file, err := os.Open(fileName)
+	file, err := os.Open(filePath)
 	if err != nil {
-		log.Fatal(err)
+		return nil
 	}
 	defer file.Close()
 
@@ -25,7 +22,7 @@ func ReadPrivateKeys() []string {
 	}
 
 	if err := scanner.Err(); err != nil {
-		log.Fatal(err)
+		return nil
 	}
 
 	return keys
