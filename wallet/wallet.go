@@ -56,12 +56,10 @@ func TransferFromFaucet(faucetWallet *types.Wallet, recipientKeys []string, amou
 		err     error
 	)
 
-	// Set context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Second)
-	defer cancel()
+	ctx := context.Background()
 
 	// Check faucet wallet balance with retries
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		balance, err = faucetWallet.Client.BalanceAt(ctx, faucetWallet.Address, nil)
 		if err == nil {
 			break

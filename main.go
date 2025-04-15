@@ -156,7 +156,7 @@ func runFaucetTransfer() error {
 	if err != nil {
 		return fmt.Errorf("invalid ETH amount: %v", err)
 	}
-	fmt.Println("Amount to transfer:", amount.String())
+	log.Println("Amount to transfer:", amount.String())
 
 	privateKeys := pkg.ReadPrivateKeysFromFile(cfg.KeysFile)
 	if len(privateKeys) == 0 {

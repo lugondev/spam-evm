@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -21,8 +22,17 @@ func GenerateRandomEthAddress() common.Address {
 }
 
 // EthToWei converts ETH amount to Wei
-func EthToWei(eth string) (*big.Int, error) {
+func EthToWei(ethAmount string) (*big.Int, error) {
+	ethFloat, ok := new(big.Float).SetString(ethAmount)
+	if !ok {
+		return nil, fmt.Errorf("invalid ETH amount")
+	}
+
+	weiFactor := new(big.Float).SetFloat64(1e18) // 1 ETH = 1e18 Wei
+	weiFloat := new(big.Float).Mul(ethFloat, weiFactor)
+
 	wei := new(big.Int)
-	wei.SetString(eth, 10)
+	weiFloat.Int(wei) // convert float to big.Int (truncates decimals)
+
 	return wei, nil
 }
