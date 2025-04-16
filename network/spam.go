@@ -33,13 +33,6 @@ var (
 		MaxRetries:  3,
 		HealthCheck: 30 * time.Second,
 	}
-
-	defaultRetryConfig = connection.RetryConfig{
-		MaxAttempts:       3,
-		InitialDelay:      100 * time.Millisecond,
-		MaxDelay:          2 * time.Second,
-		BackoffMultiplier: 2.0,
-	}
 )
 
 type nonceQueue struct {
@@ -55,7 +48,7 @@ func newNonceQueue(startNonce uint64, size int) *nonceQueue {
 	}
 
 	// Pre-fill nonce queue
-	for i := 0; i < size; i++ {
+	for i := range size {
 		q.nonces <- startNonce + uint64(i)
 	}
 
@@ -120,7 +113,7 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 
 	// Start batch processors
 	var wg sync.WaitGroup
-	for i := 0; i < maxConcurrency; i++ {
+	for range maxConcurrency {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -174,7 +167,7 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 			wallet:       w,
 		}
 
-		for i := 0; i < count; i++ {
+		for range count {
 			nonce := nonceQueues[w.Address].getNonce()
 
 			// Create transaction

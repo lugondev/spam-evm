@@ -185,10 +185,19 @@ func main() {
 		Short: "A tool for spamming EVM-compatible networks",
 		Long: `spam-evm is a command-line tool for stress testing EVM-compatible networks 
 by sending multiple transactions from different wallets concurrently.`,
+	}
+
+	spamCmd := &cobra.Command{
+		Use:   "spam",
+		Short: "Spam the network with transactions",
+		Long:  `Spam the network with transactions using multiple wallets and providers.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSpam()
 		},
 	}
+	// Add flags to spam command
+	spamFlags := spamCmd.Flags()
+	spamFlags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
 
 	faucetCmd := &cobra.Command{
 		Use:   "faucet",
@@ -198,17 +207,14 @@ by sending multiple transactions from different wallets concurrently.`,
 			return runFaucetTransfer()
 		},
 	}
-
-	// Add flags to root command
-	rootFlags := rootCmd.PersistentFlags()
-	rootFlags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
-	rootFlags.IntVar(&txPerWallet, "tx-per-wallet", 0, "Number of transactions per wallet")
-	rootFlags.IntVar(&cpuMultiplier, "cpu-multiplier", 0, "CPU core multiplier for GOMAXPROCS")
-	rootFlags.StringVar(&keysFile, "keys-file", "", "File path for private keys")
-	rootFlags.StringVar(&providerURLs, "provider-urls", "", "Comma-separated list of provider URLs")
+	// Add flags to faucet command
+	faucetFlags := faucetCmd.Flags()
+	faucetFlags.StringVar(&configFile, "config", "config.yaml", "Path to YAML config file")
 
 	// Add faucet command
 	rootCmd.AddCommand(faucetCmd)
+	// Add spam command
+	rootCmd.AddCommand(spamCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
