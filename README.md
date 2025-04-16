@@ -9,7 +9,11 @@ You can configure spam-evm using either command-line flags or a YAML configurati
 ### Using Command-line Flags
 
 ```bash
+# Using default spam command
 spam-evm --provider-urls <comma-separated-urls> [flags]
+
+# Using explicit spam subcommand
+spam-evm spam --provider-urls <comma-separated-urls> [flags]
 ```
 
 ### Using YAML Configuration
@@ -17,29 +21,70 @@ spam-evm --provider-urls <comma-separated-urls> [flags]
 The tool looks for a `config.yaml` file by default. You can also specify a different config file:
 
 ```bash
-# Use default config.yaml
+# Use default config.yaml with default command
 spam-evm
 
-# Use custom config file
-spam-evm --config <path-to-config-file>
+# Use custom config file with spam subcommand
+spam-evm spam --config <path-to-config-file>
 ```
 
-See [example.config.yaml](example.config.yaml) for a sample configuration file format.
+A sample configuration file (`config.yaml`) format:
+
+```yaml
+# Number of transactions to send per wallet
+txPerWallet: 10
+
+# CPU core multiplier for GOMAXPROCS
+cpuMultiplier: 5
+
+# File path for private keys (one key per line)
+keysFile: 'private-keys.txt'
+
+# List of provider URLs (RPC endpoints)
+providerUrls:
+    - 'https://rpc1.example.com'
+    - 'https://rpc2.example.com'
+    - 'wss://ws.example.com'
+
+# Faucet configuration
+faucet:
+    privateKey: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+    amountPerTransfer: '0.1' # Amount in ETH to transfer to each test wallet
+```
+
+See [example.config.yaml](example.config.yaml) for the latest configuration options.
 
 ### Command-line Flags
 
+Global flags:
+- `--config`: Path to YAML configuration file (default: config.yaml)
+
+Configuration options (can be set via config file or command flags):
 - `--provider-urls`: Comma-separated list of provider URLs. URLs will be randomly selected for load balancing.
-- `--config`: Path to YAML configuration file
-- `--provider-urls`: Comma-separated list of provider URLs
-- `--keys-file`: File path for private keys (one key per line, default: private-keys.txt)
-- `--tx-per-wallet`: Number of transactions per wallet (default: 10)
-- `--cpu-multiplier`: CPU core multiplier for GOMAXPROCS (default: 5)
+- `--keys-file`: File path for private keys (one key per line)
+- `--tx-per-wallet`: Number of transactions per wallet 
+- `--cpu-multiplier`: CPU core multiplier for GOMAXPROCS. This affects:
+  - Number of GOMAXPROCS (NumCPU * multiplier)
+  - Connection pool size (optimized based on CPU cores and multiplier)
+  - Maximum concurrent operations
 
 Note: Command-line flags take precedence over values in the config file.
 
 ## Commands
 
-### Spam Network (Default)
+### Spam Network
+
+The `spam` command (which is also the default) sends multiple transactions from each wallet to stress test the network. It can be run either as the default command or explicitly using the `spam` subcommand:
+
+```bash
+# Using default command
+spam-evm --config config.yaml
+
+# Using explicit spam subcommand
+spam-evm spam --config config.yaml
+```
+
+Features:
 
 The default command sends multiple transactions from each wallet to stress test the network using:
 - Transaction batching for improved throughput

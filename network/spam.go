@@ -6,10 +6,10 @@ import (
 	"log"
 	"math/big"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"spam-evm/network/connection"
+	"spam-evm/network/mempool"
 	"spam-evm/pkg"
 	"spam-evm/types"
 
@@ -18,21 +18,23 @@ import (
 )
 
 const (
-	batchSize        = 100   // Number of transactions to batch before sending
-	nonceQueueSize   = 1000  // Size of nonce queue per wallet
-	memPoolThreshold = 10000 // Maximum number of pending transactions before throttling
-	throttleDelay    = 100   // Milliseconds to wait when mempool is full
-	maxBatchAttempts = 3     // Maximum attempts to send a batch
-	batchTimeout     = 5     // Seconds to wait for batch completion
+	maxBatchSize         = 200             // Maximum number of transactions per batch
+	minBatchSize         = 20              // Minimum number of transactions per batch
+	nonceQueueSize       = 1000            // Size of nonce queue per wallet
+	maxBatchAttempts     = 3               // Maximum attempts to send a batch
+	batchTimeout         = 5               // Seconds to wait for batch completion
+	memPoolCheckInterval = 5 * time.Second // How often to check mempool size
 )
 
 var (
 	defaultPoolConfig = connection.PoolConfig{
-		MaxSize:     100, // Increased from 50
-		MinSize:     20,  // Increased from 10
+		MaxSize:     100,
+		MinSize:     20,
 		MaxRetries:  3,
 		HealthCheck: 30 * time.Second,
 	}
+
+	maxMemPoolSize int64 = 10000 // Maximum allowed mempool size
 )
 
 type nonceQueue struct {
@@ -76,7 +78,8 @@ type txBatch struct {
 }
 
 func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params *types.NetworkParams) ([]common.Hash, *types.PerformanceMetrics, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	log.Println("Starting optimized spam network...")
 
 	poolConfig := defaultPoolConfig
@@ -95,6 +98,14 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 	metrics := types.NewPerformanceMetrics()
 	startTime := time.Now()
 
+	// Initialize mempool monitor
+	client, err := pool.GetClient()
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to get client for mempool monitor: %w", err)
+	}
+	monitor := mempool.NewMonitor(client, memPoolCheckInterval)
+	monitor.Start(ctx)
+
 	// Create nonce queues for each wallet
 	nonceQueues := make(map[common.Address]*nonceQueue)
 	for _, w := range wallets {
@@ -108,8 +119,29 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 	// Channel for batch processing
 	batchChan := make(chan *txBatch, maxConcurrency)
 
-	// Track pending transactions
-	var pendingTxs int64
+	// Batch size control channel
+	batchSizeChan := make(chan int, 1)
+	batchSizeChan <- maxBatchSize // Start with max batch size
+
+	// Monitor mempool and adjust batch size
+	go func() {
+		ticker := time.NewTicker(memPoolCheckInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				recommendedSize := monitor.GetRecommendedBatchSize(maxBatchSize, minBatchSize)
+				select {
+				case <-batchSizeChan: // Clear old value
+				default:
+				}
+				batchSizeChan <- recommendedSize
+			}
+		}
+	}()
 
 	// Start batch processors
 	var wg sync.WaitGroup
@@ -134,13 +166,13 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 					for i, tx := range batch.transactions {
 						if err := client.SendTransaction(batchCtx, tx); err != nil {
 							log.Printf("Batch send error (attempt %d): %v", attempt+1, err)
-							time.Sleep(time.Duration(throttleDelay) * time.Millisecond)
+							delay := time.Duration(100*(attempt+1)) * time.Millisecond
+							time.Sleep(delay)
 							continue
 						}
 
 						resultChan <- tx.Hash()
 						metrics.IncrementTransactions()
-						atomic.AddInt64(&pendingTxs, 1)
 
 						// Return successful nonce
 						nonceQueues[batch.wallet.Address].returnNonce(batch.nonces[i])
@@ -151,9 +183,10 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 					break
 				}
 
-				// Throttle if mempool is getting full
-				if atomic.LoadInt64(&pendingTxs) > memPoolThreshold {
-					time.Sleep(time.Duration(throttleDelay) * time.Millisecond)
+				// Apply backpressure based on mempool size
+				if loadFactor := monitor.GetLoadFactor(maxMemPoolSize); loadFactor > 0.8 {
+					delay := time.Duration(float64(500)*loadFactor) * time.Millisecond
+					time.Sleep(delay)
 				}
 			}
 		}()
@@ -161,9 +194,13 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 
 	// Transaction generator goroutines
 	txGenerator := func(w *types.Wallet) {
+		// Get current batch size
+		currentBatchSize := <-batchSizeChan
+		batchSizeChan <- currentBatchSize
+
 		batch := &txBatch{
-			transactions: make([]*ethTypes.Transaction, 0, batchSize),
-			nonces:       make([]uint64, 0, batchSize),
+			transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
+			nonces:       make([]uint64, 0, currentBatchSize),
 			wallet:       w,
 		}
 
@@ -198,11 +235,16 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 			batch.nonces = append(batch.nonces, nonce)
 
 			// Send batch when full
-			if len(batch.transactions) >= batchSize {
+			if len(batch.transactions) >= currentBatchSize {
 				batchChan <- batch
+
+				// Get new batch size for next batch
+				currentBatchSize = <-batchSizeChan
+				batchSizeChan <- currentBatchSize
+
 				batch = &txBatch{
-					transactions: make([]*ethTypes.Transaction, 0, batchSize),
-					nonces:       make([]uint64, 0, batchSize),
+					transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
+					nonces:       make([]uint64, 0, currentBatchSize),
 					wallet:       w,
 				}
 			}
