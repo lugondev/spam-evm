@@ -17,6 +17,7 @@ type Wallet struct {
 	Address    common.Address
 	Client     *ethclient.Client
 	Nonce      uint64
+	Balance    *big.Int
 }
 
 type PerformanceMetrics struct {

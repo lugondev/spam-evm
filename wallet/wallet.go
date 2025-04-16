@@ -37,14 +37,31 @@ func NewWallet(privateKeyHex string, client *ethclient.Client, metrics *types.Pe
 		PrivateKey: privateKey,
 		Address:    address,
 		Client:     client,
+		Balance:    big.NewInt(0),
 	}
 
 	if client != nil {
+		// Get nonce
 		nonce, err := client.PendingNonceAt(context.Background(), address)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get nonce: %w", err)
 		}
 		wallet.Nonce = nonce
+
+		// Get balance with retries
+		for i := 0; i < 3; i++ {
+			balance, err := client.BalanceAt(context.Background(), address, nil)
+			if err == nil {
+				wallet.Balance = balance
+				break
+			}
+			if i < 2 {
+				time.Sleep(time.Second)
+			}
+		}
+		if wallet.Balance == nil {
+			return nil, fmt.Errorf("failed to get wallet balance after retries")
+		}
 	}
 
 	return wallet, nil

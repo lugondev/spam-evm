@@ -198,6 +198,18 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 		currentBatchSize := <-batchSizeChan
 		batchSizeChan <- currentBatchSize
 
+		// Calculate total cost for batch (value + gas)
+		txValue := big.NewInt(100000000000)
+		gasPrice := params.GetGasPrice()
+		gasCost := new(big.Int).Mul(gasPrice, big.NewInt(21000))
+		totalCostPerTx := new(big.Int).Add(txValue, gasCost)
+		batchCost := new(big.Int).Mul(totalCostPerTx, big.NewInt(int64(currentBatchSize)))
+
+		if w.Balance.Cmp(batchCost) < 0 {
+			errorChan <- fmt.Errorf("insufficient balance for batch: have %v, need %v", w.Balance, batchCost)
+			return
+		}
+
 		batch := &txBatch{
 			transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
 			nonces:       make([]uint64, 0, currentBatchSize),
@@ -211,7 +223,7 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 			tx := ethTypes.NewTransaction(
 				nonce,
 				pkg.GenerateRandomEthAddress(),
-				big.NewInt(10000000000000), // 0.00001 ETH
+				big.NewInt(100000000000), // 0.0000001 ETH - reduced value for spam transactions
 				uint64(21000),
 				params.GetGasPrice(),
 				nil,
