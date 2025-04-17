@@ -18,12 +18,12 @@ import (
 )
 
 const (
-	maxBatchSize         = 200             // Maximum number of transactions per batch
-	minBatchSize         = 20              // Minimum number of transactions per batch
-	nonceQueueSize       = 1000            // Size of nonce queue per wallet
-	maxBatchAttempts     = 3               // Maximum attempts to send a batch
-	batchTimeout         = 5               // Seconds to wait for batch completion
-	memPoolCheckInterval = 5 * time.Second // How often to check mempool size
+	maxBatchSize         = 100             // Reduced maximum batch size for better reliability
+	minBatchSize         = 10              // Reduced minimum batch size
+	nonceQueueSize       = 500             // Reduced nonce queue size to prevent too many pending txs
+	maxBatchAttempts     = 5               // Increased retry attempts
+	batchTimeout         = 10              // Increased timeout for better reliability
+	memPoolCheckInterval = 3 * time.Second // More frequent mempool checks
 )
 
 var (
@@ -34,7 +34,7 @@ var (
 		HealthCheck: 30 * time.Second,
 	}
 
-	maxMemPoolSize int64 = 10000 // Maximum allowed mempool size
+	maxMemPoolSize int64 = 5000 // Reduced maximum mempool size for less congestion
 )
 
 type (
@@ -223,16 +223,19 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 				sendStart := time.Now()
 				batchSuccess := true
 
-				// Send batch with exponential backoff retry
+				// Send batch with improved exponential backoff retry
 				for attempt := 0; attempt < maxBatchAttempts; attempt++ {
 					if attempt > 0 {
-						// Exponential backoff with jitter
-						backoff := time.Duration(100*(1<<attempt)) * time.Millisecond
-						time.Sleep(backoff + time.Duration(pkg.RandomInt(0, 100))*time.Millisecond)
+						// More aggressive exponential backoff with increased jitter
+						backoff := time.Duration(500*(1<<attempt)) * time.Millisecond
+						time.Sleep(backoff + time.Duration(pkg.RandomInt(0, 500))*time.Millisecond)
 
-						// Try to get a fresh client for retry
+						// Always get a fresh client for retry
 						if newClient, err := pool.GetClient(); err == nil {
 							client = newClient
+						} else {
+							log.Printf("Failed to get new client for retry: %v", err)
+							continue // Skip this attempt if we can't get a fresh client
 						}
 					}
 
@@ -261,8 +264,8 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 
 				// Dynamic backpressure based on mempool state
 				loadFactor := monitor.GetLoadFactor(maxMemPoolSize)
-				if loadFactor > 0.8 {
-					delay := time.Duration(float64(200+pkg.RandomInt(0, 300))*loadFactor) * time.Millisecond
+				if loadFactor > 0.6 { // More aggressive backpressure
+					delay := time.Duration(float64(500+pkg.RandomInt(0, 500))*loadFactor) * time.Millisecond
 					time.Sleep(delay)
 				}
 			}
