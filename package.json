@@ -14,9 +14,11 @@
 		"@openzeppelin/contracts-upgradeable": "^5.2.0",
 		"@openzeppelin/hardhat-upgrades": "^3.9.0",
 		"@typechain/hardhat": "^9.1.0",
+		"@types/js-yaml": "^4.0.9",
 		"@types/node": "^22.14.1",
 		"dotenv": "^16.0.3",
 		"hardhat": "^2.19.0",
+		"js-yaml": "^4.1.0",
 		"typescript": "^5.8.3"
 	}
 }

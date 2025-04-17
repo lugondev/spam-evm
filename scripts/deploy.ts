@@ -3,23 +3,26 @@ import { ContractTransactionResponse } from "ethers";
 
 async function main() {
 	try {
-		console.log("Deploying Disperse contract...");
+		const contractNames = ["Disperse", "Multicall3"];
 
-		// Get the contract factory
-		const Disperse = await ethers.getContractFactory("Disperse");
+		for (let index = 0; index < contractNames.length; index++) {
+			const contractName = contractNames[index];
+			console.log(`Deploying ${contractName} contract...`);
 
-		// Deploy the contract
-		const disperse = await Disperse.deploy();
-		const tx = (await disperse.deploymentTransaction()) as ContractTransactionResponse;
-		const receipt = await tx.wait();
-		console.info(`Completed at txHash: ${receipt?.hash}`);
+			// Get the contract factory
+			const contractFactory = await ethers.getContractFactory(contractName);
 
-		// Get the deployment address
-		const address = await disperse.getAddress();
+			// Deploy the contract
+			const contract = await contractFactory.deploy();
+			const tx = contract.deploymentTransaction() as ContractTransactionResponse;
+			const receipt = await tx.wait();
+			console.info(`${contractName} deployed at txHash: ${receipt?.hash}`);
 
-		console.log(`Disperse contract deployed to: ${address}`);
+			// Get the deployment address
+			const address = await contract.getAddress();
+			console.log(`${contractName} contract deployed to: ${address}`);
+		}
 
-		return address;
 	} catch (error) {
 		console.error("Deployment failed:", error);
 		process.exitCode = 1;

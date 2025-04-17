@@ -11,9 +11,11 @@
         "@openzeppelin/contracts-upgradeable": "^5.2.0",
         "@openzeppelin/hardhat-upgrades": "^3.9.0",
         "@typechain/hardhat": "^9.1.0",
+        "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.14.1",
         "dotenv": "^16.0.3",
         "hardhat": "^2.19.0",
+        "js-yaml": "^4.1.0",
         "typescript": "^5.8.3",
       },
     },
@@ -366,6 +368,8 @@
     "@types/form-data": ["@types/form-data@0.0.33", "", { "dependencies": { "@types/node": "*" } }, "sha512-8BSvG1kGm83cyJITQMZSulnl6QV8jqAGreJsc5tPu1Jq0vTSOiY/k24Wx82JRpWwZSqrala6sd5rWi6aNXvqcw=="],
 
     "@types/glob": ["@types/glob@7.2.0", "", { "dependencies": { "@types/minimatch": "*", "@types/node": "*" } }, "sha512-ZUxbzKl0IfJILTS6t7ip5fQQM/J3TJYubDm3nMbgubNNYS62eXeUpoLUC8/7fJNiFYHTrGPQn7hspDUzIHX3UA=="],
+
+    "@types/js-yaml": ["@types/js-yaml@4.0.9", "", {}, "sha512-k4MGaQl5TGo/iipqb2UDG2UwjXziSWkh0uysQelTlJpX1qGlpUZYm8PnO4DxG1qBomtJUdYJ6qR6xdIah10JLg=="],
 
     "@types/lru-cache": ["@types/lru-cache@5.1.1", "", {}, "sha512-ssE3Vlrys7sdIzs5LOxCzTVMsU7i9oa/IaW92wF32JFb3CVczqOkru2xspuKczHEbG3nvmPY7IFqVmGGHdNbYw=="],
 
