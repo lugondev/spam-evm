@@ -29,18 +29,37 @@ type ClientPool struct {
 	healthCheck time.Duration
 }
 
-type managedClient struct {
-	client       *ethclient.Client
-	endpoint     string
-	lastUsed     time.Time
-	healthy      bool
-	mu           sync.RWMutex
-	lastError    error
-	latency      time.Duration // Average latency
-	errorCount   int64         // Number of errors
-	requestCount int64         // Total number of requests
-	lastCheck    time.Time     // Last performance check
-}
+type (
+	managedClient struct {
+		client       *ethclient.Client
+		endpoint     string
+		lastUsed     time.Time
+		healthy      bool
+		mu           sync.RWMutex
+		lastError    error
+		latency      time.Duration // Average latency
+		errorCount   int64         // Number of errors
+		requestCount int64         // Total number of requests
+		lastCheck    time.Time     // Last performance check
+		successRate  float64       // Success rate over last window
+		throughput   float64       // Requests per second
+		lastFailure  time.Time     // Time of last failure
+		consecutive  struct {      // Track consecutive successes/failures
+			successes int64
+			failures  int64
+		}
+	}
+
+	// PerformanceMetrics tracks RPC endpoint performance
+	PerformanceMetrics struct {
+		Latency     time.Duration
+		SuccessRate float64
+		Throughput  float64
+		ErrorCount  int64
+		LastError   error
+		LastCheck   time.Time
+	}
+)
 
 // Performance score calculation (lower is better)
 func (mc *managedClient) getScore() float64 {
@@ -51,11 +70,43 @@ func (mc *managedClient) getScore() float64 {
 		return float64(999999) // High score for unused clients
 	}
 
+	// Calculate base scores
 	errorRate := float64(mc.errorCount) / float64(mc.requestCount)
 	latencyScore := float64(mc.latency.Milliseconds())
+	throughputScore := 100.0
+	if mc.throughput > 0 {
+		throughputScore = 100.0 / mc.throughput // Invert so lower is better
+	}
 
-	// Combined score weighs both latency and error rate
-	return latencyScore * (1 + errorRate*10)
+	// Heavily penalize recent failures
+	failurePenalty := 1.0
+	if time.Since(mc.lastFailure) < time.Minute {
+		failurePenalty = 2.0
+	}
+
+	// Reward consecutive successes
+	successBonus := 1.0
+	if mc.consecutive.successes > 10 {
+		successBonus = 0.8
+	}
+
+	// Combined weighted score
+	return (latencyScore*0.4 + throughputScore*0.3 + errorRate*100*0.3) *
+		failurePenalty * successBonus
+}
+
+func (mc *managedClient) getMetrics() PerformanceMetrics {
+	mc.mu.RLock()
+	defer mc.mu.RUnlock()
+
+	return PerformanceMetrics{
+		Latency:     mc.latency,
+		SuccessRate: mc.successRate,
+		Throughput:  mc.throughput,
+		ErrorCount:  mc.errorCount,
+		LastError:   mc.lastError,
+		LastCheck:   mc.lastCheck,
+	}
 }
 
 type PoolConfig struct {
@@ -181,13 +232,69 @@ func (p *ClientPool) healthCheckLoop() {
 		copy(clients, p.clients)
 		p.mu.RUnlock()
 
-		// Check health and adjust pool size based on performance
+		var wg sync.WaitGroup
+		checkResults := make(chan bool, len(clients))
+
+		// Perform parallel health checks
 		for _, mc := range clients {
-			go p.checkClientHealth(mc)
+			wg.Add(1)
+			go func(client *managedClient) {
+				defer wg.Done()
+				healthy := p.checkClientHealth(client)
+				checkResults <- healthy
+			}(mc)
 		}
 
-		// Analyze pool performance and adjust size
+		// Wait for all checks to complete
+		go func() {
+			wg.Wait()
+			close(checkResults)
+		}()
+
+		// Calculate health ratio
+		total := 0
+		healthy := 0
+		for result := range checkResults {
+			total++
+			if result {
+				healthy++
+			}
+		}
+
+		healthRatio := float64(healthy) / float64(total)
+
+		// Aggressive recovery if health ratio is too low
+		if healthRatio < 0.5 {
+			p.aggressiveRecovery()
+		}
+
+		// Regular pool size adjustment
 		p.adjustPoolSize()
+	}
+}
+
+func (p *ClientPool) aggressiveRecovery() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Try to recover each unhealthy client
+	for _, mc := range p.clients {
+		if !mc.isHealthy() {
+			// Attempt immediate reconnection
+			if client, err := ethclient.Dial(mc.endpoint); err == nil {
+				mc.mu.Lock()
+				mc.client = client
+				mc.healthy = true
+				mc.lastError = nil
+				mc.consecutive.failures = 0
+				mc.mu.Unlock()
+			}
+		}
+	}
+
+	// Add new clients if we're below minimum size
+	for len(p.clients) < p.minSize {
+		p.addClient()
 	}
 }
 
@@ -219,7 +326,7 @@ func (p *ClientPool) adjustPoolSize() {
 	}
 }
 
-func (p *ClientPool) checkClientHealth(mc *managedClient) {
+func (p *ClientPool) checkClientHealth(mc *managedClient) bool {
 	start := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -227,17 +334,33 @@ func (p *ClientPool) checkClientHealth(mc *managedClient) {
 	mc.mu.Lock()
 	defer mc.mu.Unlock()
 
-	// Check if client can get latest block number
-	_, err := mc.client.BlockNumber(ctx)
-	latency := time.Since(start)
+	// Perform multiple health checks
+	var successCount int
+	var totalLatency time.Duration
 
-	mc.requestCount++
+	for i := 0; i < 3; i++ {
+		// Check if client can get latest block number
+		if _, err := mc.client.BlockNumber(ctx); err == nil {
+			successCount++
+			totalLatency += time.Since(start)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	mc.requestCount += 3
 	mc.lastCheck = time.Now()
 
-	if err != nil {
+	// Calculate health metrics
+	success := successCount >= 2 // Consider healthy if at least 2/3 checks pass
+	avgLatency := totalLatency / time.Duration(successCount)
+
+	if !success {
 		mc.healthy = false
-		mc.lastError = err
+		mc.lastError = fmt.Errorf("health check failed: %d/3 successful", successCount)
 		mc.errorCount++
+		mc.lastFailure = time.Now()
+		mc.consecutive.failures++
+		mc.consecutive.successes = 0
 
 		// Try to reconnect
 		if client, err := ethclient.Dial(mc.endpoint); err == nil {
@@ -248,13 +371,23 @@ func (p *ClientPool) checkClientHealth(mc *managedClient) {
 	} else {
 		mc.healthy = true
 		mc.lastError = nil
-		// Update latency with exponential moving average
+		mc.consecutive.successes++
+		mc.consecutive.failures = 0
+
+		// Update latency with weighted moving average
 		if mc.latency == 0 {
-			mc.latency = latency
+			mc.latency = avgLatency
 		} else {
-			mc.latency = (mc.latency*4 + latency) / 5
+			mc.latency = (mc.latency*4 + avgLatency) / 5
 		}
 	}
+
+	// Update performance metrics
+	windowSize := float64(100) // Consider last 100 requests
+	mc.successRate = (windowSize - float64(mc.errorCount)) / windowSize
+	mc.throughput = float64(mc.requestCount) / time.Since(mc.lastCheck).Seconds()
+
+	return mc.healthy
 }
 
 // Close shuts down the client pool and closes all connections

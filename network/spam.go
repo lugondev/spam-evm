@@ -37,10 +37,63 @@ var (
 	maxMemPoolSize int64 = 10000 // Maximum allowed mempool size
 )
 
-type nonceQueue struct {
-	nonces    chan uint64
-	nextNonce uint64
-	mu        sync.Mutex
+type (
+	nonceQueue struct {
+		nonces    chan uint64
+		nextNonce uint64
+		mu        sync.Mutex
+	}
+
+	txBatch struct {
+		transactions []*ethTypes.Transaction
+		nonces       []uint64
+		wallet       *types.Wallet
+		prepared     bool
+	}
+
+	precomputedTx struct {
+		tx    *ethTypes.Transaction
+		nonce uint64
+	}
+
+	workPool struct {
+		workers   int
+		tasks     chan func()
+		completed chan struct{}
+		wg        sync.WaitGroup
+	}
+)
+
+func newWorkPool(workers int) *workPool {
+	wp := &workPool{
+		workers:   workers,
+		tasks:     make(chan func(), workers*2),
+		completed: make(chan struct{}),
+	}
+
+	wp.wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		go wp.worker()
+	}
+
+	return wp
+}
+
+func (wp *workPool) worker() {
+	defer wp.wg.Done()
+	for task := range wp.tasks {
+		task()
+	}
+}
+
+func (wp *workPool) submit(task func()) {
+	wp.tasks <- task
+}
+
+func (wp *workPool) close() {
+	close(wp.tasks)
+	wp.wg.Wait()
+	close(wp.completed)
 }
 
 func newNonceQueue(startNonce uint64, size int) *nonceQueue {
@@ -50,7 +103,7 @@ func newNonceQueue(startNonce uint64, size int) *nonceQueue {
 	}
 
 	// Pre-fill nonce queue
-	for i := range size {
+	for i := 0; i < size; i++ {
 		q.nonces <- startNonce + uint64(i)
 	}
 
@@ -71,13 +124,9 @@ func (q *nonceQueue) returnNonce(n uint64) {
 	}
 }
 
-type txBatch struct {
-	transactions []*ethTypes.Transaction
-	nonces       []uint64
-	wallet       *types.Wallet
-}
-
 func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params *types.NetworkParams) ([]common.Hash, *types.PerformanceMetrics, error) {
+	// Calculate optimal worker count based on CPU cores and concurrency
+	workerCount := maxConcurrency * 2
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	log.Println("Starting optimized spam network...")
@@ -116,12 +165,21 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 	resultChan := make(chan common.Hash, len(wallets)*count)
 	errorChan := make(chan error, len(wallets)*count)
 
+	// Initialize work pool for parallel tx pre-computation
+	workPool := newWorkPool(workerCount)
+	defer workPool.close()
+
+	// Channel for pre-computed transactions
+	precomputedChan := make(chan *precomputedTx, maxConcurrency*maxBatchSize)
+
 	// Channel for batch processing
 	batchChan := make(chan *txBatch, maxConcurrency)
 
-	// Batch size control channel
-	batchSizeChan := make(chan int, 1)
-	batchSizeChan <- maxBatchSize // Start with max batch size
+	// Batch size control channel with buffer for reduced contention
+	batchSizeChan := make(chan int, maxConcurrency)
+	for i := 0; i < maxConcurrency; i++ {
+		batchSizeChan <- maxBatchSize // Start with max batch size
+	}
 
 	// Monitor mempool and adjust batch size
 	go func() {
@@ -143,62 +201,115 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 		}
 	}()
 
-	// Start batch processors
+	// Start batch processors with improved error handling and backoff
 	var wg sync.WaitGroup
-	for range maxConcurrency {
+	for i := 0; i < maxConcurrency; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+
+			// Maintain a client connection for the processor
+			client, err := pool.GetClient()
+			if err != nil {
+				log.Printf("Processor failed to get initial client: %v", err)
+				return
+			}
+
 			for batch := range batchChan {
-				client, err := pool.GetClient()
-				if err != nil {
-					for range batch.transactions {
-						errorChan <- fmt.Errorf("failed to get client from pool: %w", err)
-					}
+				if !batch.prepared {
 					continue
 				}
 
-				// Send batch with retry
+				sendStart := time.Now()
+				batchSuccess := true
+
+				// Send batch with exponential backoff retry
 				for attempt := 0; attempt < maxBatchAttempts; attempt++ {
+					if attempt > 0 {
+						// Exponential backoff with jitter
+						backoff := time.Duration(100*(1<<attempt)) * time.Millisecond
+						time.Sleep(backoff + time.Duration(pkg.RandomInt(0, 100))*time.Millisecond)
+
+						// Try to get a fresh client for retry
+						if newClient, err := pool.GetClient(); err == nil {
+							client = newClient
+						}
+					}
+
 					batchCtx, cancel := context.WithTimeout(ctx, time.Second*time.Duration(batchTimeout))
-					sendStart := time.Now()
 
 					for i, tx := range batch.transactions {
 						if err := client.SendTransaction(batchCtx, tx); err != nil {
-							log.Printf("Batch send error (attempt %d): %v", attempt+1, err)
-							delay := time.Duration(100*(attempt+1)) * time.Millisecond
-							time.Sleep(delay)
+							log.Printf("TX send error (attempt %d): %v", attempt+1, err)
+							batchSuccess = false
 							continue
 						}
 
 						resultChan <- tx.Hash()
 						metrics.IncrementTransactions()
-
-						// Return successful nonce
 						nonceQueues[batch.wallet.Address].returnNonce(batch.nonces[i])
 					}
 
-					metrics.AddSendTime(time.Since(sendStart))
 					cancel()
-					break
+
+					if batchSuccess {
+						break
+					}
 				}
 
-				// Apply backpressure based on mempool size
-				if loadFactor := monitor.GetLoadFactor(maxMemPoolSize); loadFactor > 0.8 {
-					delay := time.Duration(float64(500)*loadFactor) * time.Millisecond
+				metrics.AddSendTime(time.Since(sendStart))
+
+				// Dynamic backpressure based on mempool state
+				loadFactor := monitor.GetLoadFactor(maxMemPoolSize)
+				if loadFactor > 0.8 {
+					delay := time.Duration(float64(200+pkg.RandomInt(0, 300))*loadFactor) * time.Millisecond
 					time.Sleep(delay)
 				}
 			}
 		}()
 	}
 
-	// Transaction generator goroutines
-	txGenerator := func(w *types.Wallet) {
-		// Get current batch size
-		currentBatchSize := <-batchSizeChan
-		batchSizeChan <- currentBatchSize
+	// Pre-compute transactions in parallel
+	txPrecomputer := func(w *types.Wallet) {
+		signer := ethTypes.NewEIP155Signer(params.GetChainID())
 
-		// Calculate total cost for batch (value + gas)
+		for i := 0; i < count; i++ {
+			nonce := nonceQueues[w.Address].getNonce()
+
+			workPool.submit(func() {
+				// Create and sign transaction
+				tx := ethTypes.NewTransaction(
+					nonce,
+					pkg.GenerateRandomEthAddress(),
+					big.NewInt(100000000000),
+					uint64(21000),
+					params.GetGasPrice(),
+					nil,
+				)
+
+				signStart := time.Now()
+				signedTx, err := ethTypes.SignTx(tx, signer, w.PrivateKey)
+				metrics.AddSignTime(time.Since(signStart))
+
+				if err != nil {
+					errorChan <- fmt.Errorf("failed to sign transaction: %w", err)
+					nonceQueues[w.Address].returnNonce(nonce)
+					return
+				}
+
+				precomputedChan <- &precomputedTx{
+					tx:    signedTx,
+					nonce: nonce,
+				}
+			})
+		}
+	}
+
+	// Transaction batcher goroutine
+	txBatcher := func(w *types.Wallet) {
+		currentBatchSize := <-batchSizeChan
+
+		// Calculate batch cost once
 		txValue := big.NewInt(100000000000)
 		gasPrice := params.GetGasPrice()
 		gasCost := new(big.Int).Mul(gasPrice, big.NewInt(21000))
@@ -216,65 +327,78 @@ func SpamNetwork(wallets []*types.Wallet, count int, maxConcurrency int, params 
 			wallet:       w,
 		}
 
-		for range count {
-			nonce := nonceQueues[w.Address].getNonce()
+		batchTimer := time.NewTimer(5 * time.Second)
+		defer batchTimer.Stop()
 
-			// Create transaction
-			tx := ethTypes.NewTransaction(
-				nonce,
-				pkg.GenerateRandomEthAddress(),
-				big.NewInt(100000000000), // 0.0000001 ETH - reduced value for spam transactions
-				uint64(21000),
-				params.GetGasPrice(),
-				nil,
-			)
-
-			// Sign transaction
-			signStart := time.Now()
-			signedTx, err := ethTypes.SignTx(
-				tx,
-				ethTypes.NewEIP155Signer(params.GetChainID()),
-				w.PrivateKey,
-			)
-			metrics.AddSignTime(time.Since(signStart))
-
-			if err != nil {
-				errorChan <- fmt.Errorf("failed to sign transaction: %w", err)
-				continue
-			}
-
-			batch.transactions = append(batch.transactions, signedTx)
-			batch.nonces = append(batch.nonces, nonce)
-
-			// Send batch when full
-			if len(batch.transactions) >= currentBatchSize {
-				batchChan <- batch
-
-				// Get new batch size for next batch
-				currentBatchSize = <-batchSizeChan
-				batchSizeChan <- currentBatchSize
-
-				batch = &txBatch{
-					transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
-					nonces:       make([]uint64, 0, currentBatchSize),
-					wallet:       w,
+		for {
+			select {
+			case ptx, ok := <-precomputedChan:
+				if !ok {
+					// Send remaining transactions
+					if len(batch.transactions) > 0 {
+						batch.prepared = true
+						batchChan <- batch
+					}
+					return
 				}
-			}
-		}
 
-		// Send remaining transactions
-		if len(batch.transactions) > 0 {
-			batchChan <- batch
+				batch.transactions = append(batch.transactions, ptx.tx)
+				batch.nonces = append(batch.nonces, ptx.nonce)
+
+				// Send batch when full
+				if len(batch.transactions) >= currentBatchSize {
+					batch.prepared = true
+					batchChan <- batch
+
+					// Get new batch size for next batch
+					currentBatchSize = <-batchSizeChan
+					batchSizeChan <- currentBatchSize
+
+					batch = &txBatch{
+						transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
+						nonces:       make([]uint64, 0, currentBatchSize),
+						wallet:       w,
+					}
+
+					// Reset batch timer
+					batchTimer.Reset(5 * time.Second)
+				}
+
+			case <-batchTimer.C:
+				// Send partial batch after timeout
+				if len(batch.transactions) > 0 {
+					batch.prepared = true
+					batchChan <- batch
+
+					currentBatchSize = <-batchSizeChan
+					batchSizeChan <- currentBatchSize
+
+					batch = &txBatch{
+						transactions: make([]*ethTypes.Transaction, 0, currentBatchSize),
+						nonces:       make([]uint64, 0, currentBatchSize),
+						wallet:       w,
+					}
+				}
+				batchTimer.Reset(5 * time.Second)
+			}
 		}
 	}
 
-	// Start transaction generators
+	// Start transaction pre-computation and batching
 	var genWg sync.WaitGroup
 	for _, w := range wallets {
-		genWg.Add(1)
+		genWg.Add(2)
+
+		// Start pre-computer
 		go func(wallet *types.Wallet) {
 			defer genWg.Done()
-			txGenerator(wallet)
+			txPrecomputer(wallet)
+		}(w)
+
+		// Start batcher
+		go func(wallet *types.Wallet) {
+			defer genWg.Done()
+			txBatcher(wallet)
 		}(w)
 	}
 
