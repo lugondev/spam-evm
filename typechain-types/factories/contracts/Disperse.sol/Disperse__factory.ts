@@ -8,8 +8,11 @@ import {
   Interface,
 } from "ethers";
 import type { Signer, ContractDeployTransaction, ContractRunner } from "ethers";
-import type { NonPayableOverrides } from "../../common";
-import type { Disperse, DisperseInterface } from "../../Disperse.sol/Disperse";
+import type { NonPayableOverrides } from "../../../common";
+import type {
+  Disperse,
+  DisperseInterface,
+} from "../../../contracts/Disperse.sol/Disperse";
 
 const _abi = [
   {

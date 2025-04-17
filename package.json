@@ -3,9 +3,11 @@
 	"version": "1.0.0",
 	"description": "Disperse contract deployment",
 	"scripts": {
-		"compile": "hardhat compile",
+		"compile": "hardhat clean && hardhat compile",
+		"clean": "hardhat clean",
 		"deploy:devnet": "hardhat run scripts/deploy.ts --network devnet",
-		"faucet:devnet": "hardhat run scripts/faucet.ts --network devnet"
+		"faucet:native": "hardhat run scripts/faucet-native.ts --network devnet",
+		"faucet:token": "hardhat run scripts/faucet-token.ts --network devnet"
 	},
 	"devDependencies": {
 		"@nomicfoundation/hardhat-ethers": "^3.0.8",

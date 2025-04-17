@@ -8,11 +8,11 @@ import {
   Interface,
 } from "ethers";
 import type { Signer, ContractDeployTransaction, ContractRunner } from "ethers";
-import type { NonPayableOverrides } from "../../common";
+import type { NonPayableOverrides } from "../../../common";
 import type {
   Multicall3,
   Multicall3Interface,
-} from "../../Multicall.sol/Multicall3";
+} from "../../../contracts/Multicall.sol/Multicall3";
 
 const _abi = [
   {

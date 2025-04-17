@@ -6,7 +6,7 @@ import path from "path";
 async function main() {
 	try {
 		const deployedContracts: Record<string, string> = {};
-		const contractNames = ["Disperse", "Multicall3"];
+		const contractNames = ["Disperse", "Multicall3", "Token"];
 
 		for (let index = 0; index < contractNames.length; index++) {
 			const contractName = contractNames[index];
