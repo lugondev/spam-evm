@@ -4,9 +4,12 @@
 	"description": "Disperse contract deployment",
 	"scripts": {
 		"compile": "hardhat compile",
-		"deploy:devnet": "hardhat run scripts/deploy.ts --network devnet"
+		"deploy:devnet": "hardhat run scripts/deploy.ts --network devnet",
+		"faucet:devnet": "hardhat run scripts/faucet.ts --network devnet"
 	},
 	"devDependencies": {
+		"@typechain/ethers-v6": "^0.5.1",
+		"@types/bn.js": "^5.1.6",
 		"@nomicfoundation/hardhat-ethers": "^3.0.8",
 		"@nomicfoundation/hardhat-toolbox": "^5.0.0",
 		"@nomicfoundation/hardhat-verify": "^2.0.13",
@@ -17,8 +20,11 @@
 		"@types/js-yaml": "^4.0.9",
 		"@types/node": "^22.14.1",
 		"dotenv": "^16.0.3",
-		"hardhat": "^2.19.0",
+		"hardhat": "^2.22.19",
 		"js-yaml": "^4.1.0",
 		"typescript": "^5.8.3"
+	},
+	"dependencies": {
+		"bn.js": "^5.2.1"
 	}
 }

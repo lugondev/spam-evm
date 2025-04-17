@@ -32,3 +32,4 @@ coverage.txt
 .env
 config.yaml
 !example.config.yaml
+contracts_deployed.json

@@ -1,15 +1,18 @@
 import { readFileSync } from 'fs';
+import { parseUnits } from 'ethers';
 import { load } from 'js-yaml';
 import { join } from 'path';
 
 interface Config {
+	keysFile: string;
 	providerUrls: string[];
 	faucet: {
 		privateKey: string;
+		amountPerTransfer: string;
 	};
 }
 
-export function loadConfig(): { rpcUrl: string; privateKey: string } {
+export function loadConfig(): { keysFile: string; rpcUrl: string; privateKey: string; amountFaucet: bigint } {
 	try {
 		const configPath = join(process.cwd(), 'config.yaml');
 		const fileContent = readFileSync(configPath, 'utf8');
@@ -24,8 +27,10 @@ export function loadConfig(): { rpcUrl: string; privateKey: string } {
 		}
 
 		return {
+			keysFile: config.keysFile || 'private-keys.txt',
 			rpcUrl: config.providerUrls[0],
 			privateKey: config.faucet.privateKey,
+			amountFaucet: parseUnits(config.faucet.amountPerTransfer || '1'),
 		};
 	} catch (error) {
 		console.error('Error loading config:', error);

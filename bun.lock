@@ -3,6 +3,9 @@
   "workspaces": {
     "": {
       "name": "disperse-contract",
+      "dependencies": {
+        "bn.js": "^5.2.1",
+      },
       "devDependencies": {
         "@nomicfoundation/hardhat-ethers": "^3.0.8",
         "@nomicfoundation/hardhat-toolbox": "^5.0.0",
@@ -10,7 +13,9 @@
         "@openzeppelin/contracts": "^5.1.0",
         "@openzeppelin/contracts-upgradeable": "^5.2.0",
         "@openzeppelin/hardhat-upgrades": "^3.9.0",
+        "@typechain/ethers-v6": "^0.5.1",
         "@typechain/hardhat": "^9.1.0",
+        "@types/bn.js": "^5.1.6",
         "@types/js-yaml": "^4.0.9",
         "@types/node": "^22.14.1",
         "dotenv": "^16.0.3",
