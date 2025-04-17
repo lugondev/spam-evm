@@ -7,6 +7,13 @@
 *.test
 *.out
 /vendor/
+**/debug/
+**/release/
+
+# Node/Hardhat specific
+node_modules/
+artifacts/
+cache/
 
 # IDE specific
 .idea/
@@ -17,15 +24,11 @@
 # Project specific
 *-keys.txt
 /spam-evm
-
-# Binaries for programs and plugins
-**/debug/
-**/release/
-
-# Test binary, built with "go test -c"
 *.test
-
-# Coverage
 *.coverprofile
 coverage.txt
+
+# Config and env files
+.env
 config.yaml
+!example.config.yaml

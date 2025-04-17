@@ -1,0 +1,22 @@
+{
+	"name": "disperse-contract",
+	"version": "1.0.0",
+	"description": "Disperse contract deployment",
+	"scripts": {
+		"compile": "hardhat compile",
+		"deploy:devnet": "hardhat run scripts/deploy.ts --network devnet"
+	},
+	"devDependencies": {
+		"@nomicfoundation/hardhat-ethers": "^3.0.8",
+		"@nomicfoundation/hardhat-toolbox": "^5.0.0",
+		"@nomicfoundation/hardhat-verify": "^2.0.13",
+		"@openzeppelin/contracts": "^5.1.0",
+		"@openzeppelin/contracts-upgradeable": "^5.2.0",
+		"@openzeppelin/hardhat-upgrades": "^3.9.0",
+		"@typechain/hardhat": "^9.1.0",
+		"@types/node": "^22.14.1",
+		"dotenv": "^16.0.3",
+		"hardhat": "^2.19.0",
+		"typescript": "^5.8.3"
+	}
+}
