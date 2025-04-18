@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"spam-evm/network/connection"
-	"spam-evm/network/mempool"
 	"spam-evm/pkg"
 	"spam-evm/types"
 	"spam-evm/wallet"
@@ -19,11 +18,10 @@ import (
 )
 
 const (
-	optMaxBatchSize         = 500             // Increased max batch size
-	optMinBatchSize         = 50              // Increased min batch size
-	optMaxBatchAttempts     = 5               // Increased max attempts
-	optBatchTimeout         = 10              // Increased timeout
-	optMemPoolCheckInterval = 2 * time.Second // Reduced interval
+	optBatchSize        = 1000 // Fixed large batch size
+	optMaxBatchAttempts = 5    // Max retry attempts
+	optBatchTimeout     = 10   // Timeout in seconds
+	optBackoffDelay     = 100  // Base backoff delay in ms
 )
 
 // txBatchOptimized represents a batch of transactions with metadata
@@ -70,10 +68,6 @@ func SpamNetworkOptimized(privateKeys []string, count int, maxConcurrency int, p
 		return nil, nil, fmt.Errorf("failed to initialize wallets: %w", err)
 	}
 
-	// Initialize mempool monitor with reduced interval
-	monitor := mempool.NewMonitor(client, optMemPoolCheckInterval)
-	monitor.Start(ctx)
-
 	// Initialize nonce managers for each wallet
 	nonceManagers := NewNonceManagerMap()
 	for _, w := range wallets {
@@ -97,14 +91,12 @@ func SpamNetworkOptimized(privateKeys []string, count int, maxConcurrency int, p
 			errorChan,
 			metrics,
 			nonceManagers,
-			monitor,
 			&processorWg,
 		)
 	}
 
 	// Start transaction generation
 	var generatorWg sync.WaitGroup
-	batchSize := maxBatchSize // Start with max batch size
 
 	for _, w := range wallets {
 		generatorWg.Add(1)
@@ -116,15 +108,8 @@ func SpamNetworkOptimized(privateKeys []string, count int, maxConcurrency int, p
 			batchID := 0
 
 			for remainingTx > 0 {
-				// Check mempool status and adjust batch size
-				if loadFactor := monitor.GetLoadFactor(10000); loadFactor > 0.8 {
-					batchSize = optMinBatchSize
-				} else {
-					batchSize = optMaxBatchSize
-				}
-
-				// Calculate actual batch size
-				currentBatchSize := min(batchSize, remainingTx)
+				// Calculate batch size
+				currentBatchSize := min(optBatchSize, remainingTx)
 
 				// Create batch
 				batch := &txBatchOptimized{
@@ -167,10 +152,6 @@ func SpamNetworkOptimized(privateKeys []string, count int, maxConcurrency int, p
 					batchID++
 				}
 
-				// Apply backpressure if mempool is stressed
-				if loadFactor := monitor.GetLoadFactor(10000); loadFactor > 0.9 {
-					time.Sleep(time.Duration(float64(100)*loadFactor) * time.Millisecond)
-				}
 			}
 		}(w)
 	}
@@ -210,7 +191,6 @@ func processBatchesOptimized(
 	errorChan chan<- error,
 	metrics *types.PerformanceMetrics,
 	nonceManagers *NonceManagerMap,
-	monitor *mempool.Monitor,
 	wg *sync.WaitGroup,
 ) {
 	defer wg.Done()
@@ -228,7 +208,7 @@ func processBatchesOptimized(
 		var sent int
 		for attempt := 0; attempt < optMaxBatchAttempts; attempt++ {
 			if attempt > 0 {
-				delay := time.Duration(100<<uint(attempt-1)) * time.Millisecond
+				delay := time.Duration(optBackoffDelay<<uint(attempt-1)) * time.Millisecond
 				time.Sleep(delay)
 			}
 
